@@ -136,13 +136,31 @@ function saveSettings() {
 async function loadFromGitHub() {
   const owner = document.getElementById('owner').value.trim();
   const repo = document.getElementById('repo').value.trim();
+  const token = document.getElementById('pat').value.trim();
   if (!owner || !repo) { setStatus('Önce GitHub ayarlarını doldur.', 'err'); return; }
   setStatus('Yükleniyor...', 'info');
   try {
-    const url = `https://raw.githubusercontent.com/${owner}/${repo}/main/data/solved.json?t=${Date.now()}`;
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
+    let data;
+    if (token) {
+      // Önbelleksiz, her zaman en güncel veriyi veren GitHub API (Contents) üzerinden oku.
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/solved.json`;
+      const resp = await fetch(apiUrl, {
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.raw+json',
+          'X-GitHub-Api-Version': '2022-11-28'
+        }
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} (API)`);
+      data = await resp.json();
+    } else {
+      // Token yoksa (ilk açılış), önbellek riskini azaltmak için no-store + cache-bust ile dene.
+      const url = `https://raw.githubusercontent.com/${owner}/${repo}/main/data/solved.json?t=${Date.now()}`;
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      data = await resp.json();
+    }
     solvedSet.clear();
     (data.solved || []).forEach(n => solvedSet.add(n));
     MAX_N = data.max_n || MAX_N;
